@@ -6,6 +6,8 @@
 
 # GeneNoteBook
 
+**Note**: This is a fork of https://github.com/genenotebook/genenotebook
+
 ### A collaborative notebook for comparative genomics
 
 > Full documentation is at http://genenotebook.github.io/
