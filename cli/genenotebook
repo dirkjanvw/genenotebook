@@ -49,13 +49,17 @@ class GeneNoteBookConnection {
       .then((loginResult) => {
         logger.log(`Established connection to ${this.connection.endpoint}`);
         return this.connection.call(methodName, methodOpts);
-      }).then(({ result, jobId }) => {
+      }).then(({ result, jobId, jobStatus }) => {
         if (jobId) {
           logger.log(`Job ID ${jobId}`);
         } else if (result) {
           const { nInserted } = result;
           logger.log(
             `Server method ${methodName} succesfully inserted ${nInserted} elements`,
+          );
+        } else if (jobStatus) {
+          logger.log(
+            `Job status: ${jobStatus}`,
           );
         } else {
           logger.error('Undefined server response');
@@ -130,8 +134,8 @@ function startMongoDaemon(dbPath, mongoPort) {
 }
 
 async function startGeneNoteBook(cmd) {
-  const PORT = parseInt(cmd.port, 10) || 3000;
-  const ROOT_URL = cmd.rootUrl || `http://localhost:${PORT}`;
+  const PORT = parseInt(cmd.opts().port, 10) || 3000;
+  const ROOT_URL = cmd.opts().rootUrl || `http://localhost:${PORT}`;
   const opts = { PORT, ROOT_URL };
 
   if (fs.existsSync('settings.json') && !('METEOR_SETTINGS' in process.env)) {
@@ -139,14 +143,14 @@ async function startGeneNoteBook(cmd) {
     Object.assign(opts, { METEOR_SETTINGS });
   }
 
-  if (cmd.mongoUrl) {
-    if (cmd.dbPath) {
+  if (cmd.opts().mongoUrl) {
+    if (cmd.opts().dbPath) {
       throw new Error('--db-path and --mongo-url are mutually exclusive');
     }
-    Object.assign(opts, { MONGO_URL: cmd.mongoUrl });
+    Object.assign(opts, { MONGO_URL: cmd.opts().mongoUrl });
   } else {
-    const dbPath = cmd.dbPath || './db';
-    const mongoPort = cmd.mongoPort || 27017;
+    const dbPath = cmd.opts().dbPath || './db';
+    const mongoPort = cmd.opts().mongoPort || 27017;
     const { MONGO_URL, mongoDaemon } = await startMongoDaemon(
       path.resolve(dbPath),
       mongoPort,
@@ -348,5 +352,38 @@ addOrthogroups.description('Add Orthogroup phylogenetic trees to a running GeneN
 const remove = program.command('remove [type]', 'Remove data from a running GeneNoteBook server');
 
 const list = program.command('list', 'List contents of a running GeneNoteBook server');
+
+// add
+const user = program
+  .command('user [command]')
+  .description('Interact with GeneNoteBook users')
+  .usage('[command]');
+
+const setUserPassword = user
+    .command('setpassword')
+
+setUserPassword.description('Set an user password')
+  .usage('[options]')
+  .arguments('<userName> <newPassword>')
+  .requiredOption('-u, --username <adminUsername>', 'GeneNoteBook admin username')
+  .requiredOption('-p, --password <adminPassword>', 'GeneNoteBook admin password')
+  .option('--port [port]', 'Port on which GeneNoteBook is running. Default: 3000')
+  .action((userName, newPassword, {username, password, port = 3000,}) => {
+
+    if (!(userName && newPassword && username && password)) {
+      setUserPassword.help();
+    }
+
+    new GeneNoteBookConnection({ username, password, port })
+      .call('setUsernamePassword', { userName, newPassword });
+  })
+  .on('--help', function () {
+    console.log(`
+Example:
+    genenotebook user setpassword -u admin -p admin username newpassword
+    `);
+  })
+  .exitOverride(customExitOverride(setUserPassword));
+
 
 program.parse(process.argv);
